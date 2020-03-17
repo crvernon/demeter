@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Land use intensification algorithm.
 
@@ -11,7 +13,7 @@ Open source under license BSD 2-Clause - see LICENSE and DISCLAIMER
 import os
 import numpy as np
 
-import demeter.demeter_io.writer as wdr
+import demeter_io.writer as wdr
 
 
 def diff_diagnostic(diag_outdir, d_regid_nm, gcam_landmatrix, spat_landmatrix, reg, yr, yr_idx):
@@ -92,12 +94,11 @@ def _convert_pft(notdone, int_target, metnumber, pft_toconv, spat_ludataharm_sub
         spat_ludataharm_sub[exist_cells, pft_toconv] -= actexpansion
 
         # update the target change values
-        actual_expansion_sum = np.sum(actexpansion)
-        target_change[reg, metnumber - 1, pft] -= actual_expansion_sum
-        int_target -= actual_expansion_sum
-        target_intensification[metnumber - 1, pft] -= actual_expansion_sum
-        target_change[reg, metnumber - 1, pft_toconv] += actual_expansion_sum
-        target_intensification[metnumber - 1, pft_toconv] += actual_expansion_sum
+        target_change[reg, metnumber - 1, pft] -= np.sum(actexpansion)
+        int_target -= np.sum(actexpansion)
+        target_intensification[metnumber - 1, pft] -= np.sum(actexpansion)
+        target_change[reg, metnumber - 1, pft_toconv] += np.sum(actexpansion)
+        target_intensification[metnumber - 1, pft_toconv] += np.sum(actexpansion)
         trans_mat[exist_cells, pft, pft_toconv] += actexpansion
 
         # account for target change minuscule values when evaluating notdone
@@ -313,10 +314,9 @@ def apply_intensification(log, pass_number, c, spat_region, order_rules, allregn
         metnumber = allregmet[reg_idx][met_idx]
 
         # create data subset
-        reg_met_mask = (spat_region == regnumber) & (spat_met == metnumber)
-        spat_ludataharm_sub = spat_ludataharm[reg_met_mask]
-        kernel_vector_sub = kernel_vector[reg_met_mask]
-        cons_data_sub = cons_data[reg_met_mask]
+        spat_ludataharm_sub = spat_ludataharm[(spat_region == regnumber) & (spat_met == metnumber)]
+        kernel_vector_sub = kernel_vector[(spat_region == regnumber) & (spat_met == metnumber)]
+        cons_data_sub = cons_data[(spat_region == regnumber) & (spat_met == metnumber)]
 
         # calculate intensification
         citz = _intensification(c.diagnostic, diag_file, spat_ludataharm_sub, target_intensification, kernel_vector_sub,
@@ -324,10 +324,10 @@ def apply_intensification(log, pass_number, c, spat_region, order_rules, allregn
                                 constrain_rules, target_change, transition_rules, land_mismatch)
 
         # apply intensification
-        spat_ludataharm[reg_met_mask], trans_mat, target_change, target_intensification = citz
+        spat_ludataharm[(spat_region == regnumber) & (spat_met == metnumber)], trans_mat, target_change, target_intensification = citz
 
         # log transition
-        transitions[reg_met_mask, :, :] += trans_mat
+        transitions[(spat_region == regnumber) & (spat_met == metnumber), :, :] += trans_mat
 
     # calculate non-achieved change
     non_chg = np.sum(abs(target_change[:, :, :])) / 2.

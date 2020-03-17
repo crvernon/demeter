@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Processes the calculation, map creation, and logging of statistical methods used in determining land use change.
 
@@ -7,12 +9,13 @@ Open source under license BSD 2-Clause - see LICENSE and DISCLAIMER
 
 @author:  Chris R. Vernon (PNNL); Yannick le Page (niquya@gmail.com)
 """
+
 import numpy as np
 import os
 
-import demeter.change.intensification as itz
-import demeter.change.expansion as exp
-import demeter.demeter_io.writer as wdr
+import change.intensification as itz
+import change.expansion as exp
+import demeter_io.writer as wdr
 
 
 class ProcessStep:
@@ -133,55 +136,22 @@ class ProcessStep:
     def outputs(self):
         """
         Create time step specific outputs.
-
-        :param spat_ludataharm:         harmonized land cover in sqkm per grid cell per land class (n_cells, n_landclasses)
-        :param spat_ludataharm_orig:    same as spat_ludataharm but for the previous time step (n_cells, n_landclasses)
-        :param cellarea:                cell area in sqkm for each grid cell (n_cells)
-        :param celltrunk:               actual percentage of the grid cell included in the data (n_cells)
-        :param l_fcs:                   the number of land classes
-        :param cellindexresin:          index of x, y for grid cell location (position, n_cells)
-        :param lat:                     geographic coordinate for each latitude in grid
-        :param lon:                     geographic coordinate for each longitude in grid
-        :param step:                    time step being processed
-        :param region_coords:           full path with extension to region coords file
-        :param country_coords:          full path with extension to country coords file
-        :param luc_ts_luc:              path to luc_timestep output dir
-        :param transitions:             area in sqkm of each transition from one land class to another (n_cells, n_landclasses, n_landclasses)
-        :param user_years:              a list of user selected years to process
         """
-        # convert metric_id back to the original
-        revert_metric_dict = {self.s.sequence_metric_dict[k]: k for k in self.s.sequence_metric_dict.iterkeys()}
-        orig_spat_aez = np.vectorize(revert_metric_dict.get)(self.s.spat_aez)
-
-        # convert land cover from sqkm per grid cell per land class to fraction for mapping (n_grids, n_landclasses)
-        map_fraction_lu = self.s.spat_ludataharm / np.tile(self.s.cellarea, (self.l_fcs, 1)).T
-
-        # do the same for the previous or starting step for mapping
-        map_fraction_lu_prev = self.s.spat_ludataharm_orig / np.tile(self.s.cellarea, (self.l_fcs, 1)).T
-
-        # convert land cover from sqkm per grid cell per land class to fraction (n_grids, n_landclasses)
-        fraction_lu = self.s.spat_ludataharm / np.tile(self.s.cellarea * self.s.celltrunk, (self.l_fcs, 1)).T
-
-        # create map grids of spatial data in grid cell fraction; -9999 is NODATA; (lat_val, lon_val, n_landclasses)
-        map_grid_prev = np.zeros((len(self.s.lat), len(self.s.lon), len(self.s.final_landclasses))) + -9999
-        map_grid_now = np.zeros((len(self.s.lat), len(self.s.lon), len(self.s.final_landclasses))) + -9999
-        map_grid_prev[np.int_(self.s.cellindexresin[0, :]), np.int_(self.s.cellindexresin[1, :]), :] = map_fraction_lu_prev
-        map_grid_now[np.int_(self.s.cellindexresin[0, :]), np.int_(self.s.cellindexresin[1, :]), :] = map_fraction_lu
-        map_grid_chg = map_grid_now - map_grid_prev
 
         # optionally map time step
         if (self.c.map_luc == 1) and (self.step in self.c.target_years_output):
 
             self.log.info("Mapping land cover change for time step {0}...".format(self.step))
 
-            wdr.map_luc(map_fraction_lu, map_fraction_lu_prev, self.s.cellindexresin, self.s.lat, self.s.lon,
-                        self.s.final_landclasses, self.step, self.c.region_coords, self.c.country_coords,
-                        self.c.luc_ts_luc, 'timestep_luc')
+            wdr.map_luc(self.s.spat_ludataharm / np.tile(self.s.cellarea, (self.l_fcs, 1)).T,
+                        self.s.spat_ludataharm_orig / np.tile(self.s.cellarea, (self.l_fcs, 1)).T,
+                        self.s.cellindexresin, self.s.lat, self.s.lon, self.s.final_landclasses, self.step,
+                        self.c.region_coords, self.c.country_coords, self.c.luc_ts_luc, 'timestep_luc')
 
-            # set prev year array to current year for next time step iteration
+            # set prev year array to current year
             self.s.spat_ludataharm_orig = self.s.spat_ludataharm * 1.
 
-        # optionally save land cover transitions as a CSV
+        # optionally save land cover transitions as CSV files
         if (self.c.save_transitions == 1) and (self.step in self.c.target_years_output):
 
             self.log.info("Saving land cover transition files for time step {0}...".format(self.step))
@@ -189,34 +159,35 @@ class ProcessStep:
             wdr.write_transitions(self.s, self.c, self.step, self.transitions)
 
         # optionally create land cover transition maps
-        if (self.c.save_transition_maps == 1) and (self.step in self.c.target_years_output):
+        if (self.c.save_transition_maps == 1) and (self.step  in self.c.target_years_output):
 
             self.log.info("Saving land cover transition maps for time step {0}...".format(self.step))
 
             wdr.map_transitions(self.s, self.c, self.step, self.transitions)
 
-        # create a NetCDF file of land cover fraction for each year by grid cell containing each land class
-        if (self.c.save_netcdf_yr == 1) and (self.step in self.c.target_years_output):
+        # optionally save land cover data for each PFT as yearly interpolated NetCDF
+        if (self.c.save_netcdf_pft == 1) and (self.step in self.c.target_years_output):
 
-            self.log.info("Saving output in NetCDF format for time step {0} per land class...".format(self.step))
+            self.log.info("Saving output in NetCDF format for time step {0}...".format(self.step))
+
+            # netcdf_outfile = ''
+            #
+            # wdr.to_netcdf_step(self.s.spat_ludataharm / np.tile(self.s.cellarea * self.s.celltrunk, (self.l_fcs, 1)).T,
+            #                 self.s.cellindexresin, self.s.lat, self.s.lon, self.c.resin, self.s.final_landclasses,
+            #                 self.step, self.s.user_years, netcdf_outfile, self.c.timestep, self.c.model)
 
             # create out path and file name for NetCDF file
-            netcdf_yr_out = os.path.join(self.c.lc_per_step_nc, 'lc_yearly_{0}.nc'.format(self.step))
+            netcdf_outfile = os.path.join(self.c.lc_per_step_nc, 'landcover_{0}.nc')
 
-            wdr.to_netcdf_yr(fraction_lu, self.s.cellindexresin, self.s.lat, self.s.lon, self.c.resin,
-                             self.s.final_landclasses, self.step, self.c.model, netcdf_yr_out)
-
-        # create a NetCDF file of land cover fraction for each land class by grid cell containing each year
-        if (self.c.save_netcdf_lc == 1) and (self.step in self.c.target_years_output):
-            self.log.info("Saving stacked land class for time step {0}...".format(self.step))
-            wdr.to_netcdf_lc(map_grid_now, self.s.lat, self.s.lon, self.c.resin,
-                             self.s.final_landclasses, self.s.user_years, self.step,
-                             self.c.model, self.c.lc_per_step_nc)
+            # create NetCDF file for each PFT that interpolates 5-year to yearly
+            wdr.to_netcdf_pft(self.s.spat_ludataharm / np.tile(self.s.cellarea * self.s.celltrunk, (self.l_fcs, 1)).T,
+                              self.s.cellindexresin, self.s.lat, self.s.lon, self.c.resin, self.s.final_landclasses,
+                              self.step, self.s.user_years, netcdf_outfile, self.c.timestep, self.c.model)
 
         # save land cover data for the time step
         if (self.c.save_tabular == 1) and (self.step in self.c.target_years_output):
             self.log.info("Saving tabular land cover data for time step {0}...".format(self.step))
-            wdr.lc_timestep_csv(self.c, self.step, self.s.final_landclasses, self.s.spat_coords, orig_spat_aez,
+            wdr.lc_timestep_csv(self.c, self.step, self.s.final_landclasses, self.s.spat_coords, self.s.spat_aez,
                                 self.s.spat_region, self.s.spat_water, self.s.cellarea, self.s.spat_ludataharm,
                                 self.c.metric, self.c.tabular_units)
 
@@ -224,21 +195,6 @@ class ProcessStep:
         if (self.c.save_shapefile == 1) and (self.step in self.c.target_years_output):
             self.log.info("Saving land cover data for time step as a shapefile {0}".format(self.step))
             wdr.to_shp(self.c, self.step, self.s.final_landclasses)
-
-        # create an ASCII raster with the land class number having the maximum area for each grid cell
-        if (self.c.save_ascii_max == 1) and (self.step in self.c.target_years_output):
-            self.log.info("Saving output in ASCII raster format for time step {0}...".format(self.step))
-
-            # call function for output object using available data detailed in this methods docstring
-            wdr.max_ascii_rast(map_grid_now, self.c.out_dir, self.step, cellsize=self.c.resin)
-
-        # --------- NEW OUTPUT PARAM HERE --------- #
-        # Create a conditional statement after the following for your extended format where
-        #   your parameter created in config_reader.py is in the place of 'self.c.save_ascii_max' with the same
-        #   'self.c.' prefix.  Then call your function from writer.py using wdr as the prefix
-        #   alias (e.g., wdr.your_function).
-
-        # --------- END OUTPUT EXTENSION --------- #
 
     def process(self):
         """
