@@ -7,15 +7,10 @@ Open source under license BSD 2-Clause - see LICENSE and DISCLAIMER
 
 @author:  Chris R. Vernon (chris.vernon@pnnl.gov)
 """
+
 import numpy as np
 import os
 import pandas as pd
-
-
-class ValidationException(Exception):
-    """Validation exception for error in runtime test."""
-    def __init__(self,*args,**kwargs):
-        Exception.__init__(self,*args,**kwargs)
 
 
 def to_dict(f, header=False, delim=',', swap=False):
@@ -108,7 +103,7 @@ def read_alloc(f, lc_col, output_level=3, delim=','):
         fcs = [i for i in df.columns if i != col]
 
         # extract target land cover values only from the dataframe and create Numpy array
-        arr = df[fcs].values
+        arr = df[fcs].as_matrix()
 
         if output_level == 3:
             return fcs, tcs, arr
@@ -182,8 +177,7 @@ def _get_steps(df, start_step, end_step):
     return l
 
 
-def read_gcam_file(log, f, gcam_landclasses, start_yr, end_yr, scenario, region_dict, agg_level, metric_seq,
-                   area_factor=1000):
+def read_gcam_file(log, f, gcam_landclasses, start_yr, end_yr, scenario, region_dict, agg_level, area_factor=1000):
     """
     Read and process the GCAM land allocation output file.
 
@@ -194,7 +188,6 @@ def read_gcam_file(log, f, gcam_landclasses, start_yr, end_yr, scenario, region_
     :param end_yr:              User-defined GCAM end year to process from configuration file
     :param scenario:            GCAM scenario name contained in file that the user wishes to process; set in config.ini
     :param region_dict:         The reference dictionary for GCAM region_name: region_id
-    :param metric_seq:          An ordered list of expected metric ids
     :param area_factor:         The factor that will be a multiplier to the land use area that is in thousands km
     :return:                    A list of the following (represents the target user-defined scenario):
                                     user_years:             a list of target GCAM years as int
@@ -206,6 +199,7 @@ def read_gcam_file(log, f, gcam_landclasses, start_yr, end_yr, scenario, region_
                                     allregnumber:           Numpy array of unique region numbers
                                     allregaez:              List of lists, metric ids per region
     """
+
     # read GCAM output file as a dataframe; skip title row
     gdf = pd.read_csv(f, header=0)
 
@@ -215,57 +209,40 @@ def read_gcam_file(log, f, gcam_landclasses, start_yr, end_yr, scenario, region_
     # assign user-defined scenario to data frame
     gdf['scenario'] = scenario
 
-    # check for extractor output which makes region ... gcam_region_name
-    try:
-        gdf['region'] = gdf['gcam_region_name']
-    except KeyError:
-        pass
-
     # create a list of GCAM years from header that are within the user specified year range
     user_years = _get_steps(gdf, start_yr, end_yr)
 
     # create land use area per year array converted from thousands km using area_factor
     target_years = [str(yr) for yr in user_years]
-    gcam_ludata = gdf[target_years].values * area_factor
+    gcam_ludata = gdf[target_years].as_matrix() * area_factor
 
     # create field for land class
     gdf['gcam_landname'] = gdf['landclass'].apply(lambda x: x.lower())
 
-    unique_metric_list = np.sort(gdf['metric_id'].unique())
-
-    # get a list of metrics that are in the master list but not the projected data
-    metric_not_in_prj = sorted(list(set(metric_seq) - set(unique_metric_list)))
-
     # create dictionary to look up metric id to its index to act as a proxy for non-sequential values
-    sequence_metric_dict = {i: ix+1 for ix, i in enumerate(gdf['metric_id'].sort_values().unique())}
-
-    max_prj_metric = max([sequence_metric_dict[k] for k in sequence_metric_dict.keys()]) + 1
-
-    for i in metric_not_in_prj:
-        sequence_metric_dict[i] = max_prj_metric
-        max_prj_metric += 1
+    lu = {i: ix+1 for ix, i in enumerate(gdf['metric_id'].sort_values().unique())}
 
     # create field for metric id that has sequential metric ids
-    gdf['gcam_metric'] = gdf['metric_id'].map(lambda x: sequence_metric_dict[x])
+    gdf['gcam_metric'] = gdf['metric_id'].map(lambda x: lu[x])
 
-    # check field for GCAM region number based off of region name; if region name is None, assign 1
+    # check field for GCAM region number based off of region name; if region name is None, assign 9999
     ck_reg = gdf['region'].unique()
     if (len(ck_reg)) == 1 and (ck_reg[0] == 1):
-        gdf['gcam_regionnumber'] = 1
+        gdf['gcam_regionnumber'] = 1 # gdf['gcam_regionnumber'] = 9999
     else:
         gdf['gcam_regionnumber'] = gdf['region'].map(lambda x: int(region_dict[x]))
 
     # create an array of AEZ or Basin positions
-    gcam_metric  = gdf['gcam_metric'].values
+    gcam_metric  = gdf['gcam_metric'].as_matrix()
 
     # create an array of AEZ or Basin ids; formerly gcam_aez; this has the original metric values - not sequential
-    metric_id_array = gdf['metric_id'].values
+    metric_id_array = gdf['metric_id'].as_matrix()
 
     # create an array of projected land use names
-    gcam_landname = gdf['gcam_landname'].values
+    gcam_landname = gdf['gcam_landname'].as_matrix()
 
     # create an array of GCAM region numbers
-    gcam_regionnumber = gdf['gcam_regionnumber'].values
+    gcam_regionnumber = gdf['gcam_regionnumber'].as_matrix()
 
     # create a list of GCAM regions represented
     l_allreg = gdf['region'].unique().tolist()
@@ -276,9 +253,9 @@ def read_gcam_file(log, f, gcam_landclasses, start_yr, end_yr, scenario, region_
     # Add Taiwan region id (30) and region name 'Taiwan' as a part of China which is how GCAM constructs its land use
     #   data; the value will be added to China later in the code and is only added for computation purposes and will
     #   have no associated calculation.
-    if agg_level == 2:
-        l_allreg.append('Taiwan')
-        l_allregnumber.append(30)
+    #if agg_level == 2:
+    #    l_allreg.append('Taiwan')
+    #    l_allregnumber.append(30)
 
     # convert lists to array and sort
     allreg = np.array(l_allreg)
@@ -296,93 +273,84 @@ def read_gcam_file(log, f, gcam_landclasses, start_yr, end_yr, scenario, region_
     log.info('Number of basins or AEZs from projected file:  {0}'.format(len(allmetric)))
 
     # add Taiwan region space holder if aggregated by GCAM region
-    if agg_level == 2:
-        taiwan_idx = np.where(allreg == 'Taiwan')[0][0]-1
-        allregaez.insert(taiwan_idx, [])
+    #if agg_level == 2:
+    #    taiwan_idx = np.where(allreg == 'Taiwan')[0][0]-1
+    #    allregaez.insert(taiwan_idx, [])
 
     return [user_years, gcam_ludata, gcam_metric, gcam_landname, gcam_regionnumber, allreg, allregnumber, allregaez,
-            allmetric, metric_id_array, sequence_metric_dict]
+            allmetric, metric_id_array]
 
 
-def read_base(log, c, spat_landclasses, sequence_metric_dict, metric_seq, region_seq):
+def read_base(log, c, spat_landclasses):
     """
     Read and process base layer land cover file.
 
-    :param c:                           Configuration object
-    :param spat_landclasses:            A list of land classes represented in the observed data
-    :param sequence_metric_dict:        A dictionary of projected metric ids to their original id
-    :param metric_seq:                  An ordered list of expected metric ids
-    :param region_seq:                  An ordered list of expected region ids
+    :param f:
+    :param spat_landclasses:
+    :param resolution:
     :return:
     """
+
+    # read base layer as a dataframe
     df = pd.read_csv(c.first_mod_file)
 
     # rename columns as lower case
     df.columns = [i.lower() for i in df.columns]
 
-    # create array with only spatial land cover values
     try:
-        spat_ludata = df[spat_landclasses].values
+        # create array with only spatial land cover values
+        spat_ludata = df[spat_landclasses].as_matrix()
     except KeyError as e:
         log.error('Fields are listed in the spatial allocation file that do not exist in the base layer.')
         log.error(e)
 
     # create array of latitude, longitude coordinates
     try:
-        spat_coords = df[['latcoord', 'loncoord']].values
+        spat_coords = df[['latcoord', 'loncoord']].as_matrix()
     except KeyError:
-        spat_coords = df[['latitude', 'longitude']].values
+        spat_coords = df[['latitude', 'longitude']].as_matrix()
 
     # create array of metric (AEZ or basin id) per region; naming convention (regionmetric); formerly spat_aezreg
     try:
-        spat_metric_region = df['regaez'].values
+        spat_metric_region = df['regaez'].as_matrix()
     except:
         spat_metric_region = None
 
     # create array of grid ids
-    spat_grid_id = df[c.pkey].values
+    spat_grid_id = df[c.pkey].as_matrix()
 
-    # create array of water areas
     try:
-        spat_water = df['water'].values
+        # create array of water areas
+        spat_water = df['water'].as_matrix()
     except KeyError:
         log.warning('Water not represented in base layer.  Representing water as 0 percent of grid.')
         spat_water = np.zeros_like(spat_grid_id)
 
-    spat_region = df['region_id'].values
-    spat_metric = df['{0}_id'.format(c.metric.lower())].values
+    # for aez scale
+    if c.agg_level == 2:
 
-    # ensure that the observed data represents all expected region ids
-    unique_spat_region = np.unique(spat_region)
-    valid_region_test = set(region_seq) - set(unique_spat_region)
+        # for old style parsing of regaez field
+        # spat_region = np.int8(np.floor(spat_metric_region / 100))
+        # spat_metric = np.int8(spat_metric_region % 100)
 
-    if len(valid_region_test) > 0:
-        log.error('Observed spatial data must have all regions represented.')
-        raise ValidationException
+        # for new parsing style
+        spat_region = df['region_id'].as_matrix()
+        spat_metric = df['{0}_id'.format(c.metric.lower())].as_matrix()
 
-    # ensure that the observed data represents all expected metric ids
-    unique_spat_metric = np.unique(spat_metric)
-    valid_metric_test = set(metric_seq) - set(unique_spat_metric)
-
-    if len(valid_metric_test) > 0:
-        log.error('Observed spatial data must have all {}_id represented.'.format(c.metric.lower()))
-        raise ValidationException
-
-    # account for 0 designation in observed data for unclassified
-    if 0 in np.unique(spat_metric):
-        sequence_metric_dict[0] = 0
-
-    # adjust the numbering of metrics in the observed data
-    spat_metric = np.vectorize(sequence_metric_dict.get)(spat_metric)
+    # for basin scale
+    elif c.agg_level == 1:
+        spat_r = df['region_id'].as_matrix()
+        spat_region = np.ones_like(spat_r) # np.zeros_like(spat_r) + 9999
+        spat_metric = df['{0}_id'.format(c.metric.lower())].as_matrix()
 
     # get the total number of grid cells
     ngrids = len(df)
 
     # change spatial region value for Taiwan from 30 to 11 for China to account for GCAM allocation procedure
-    if c.model.lower() == 'gcam' and c.agg_level == 2:
-        spat_region[spat_region == 30] = 11
+    #if c.model.lower() == 'gcam' and c.agg_level == 2:
+    #    spat_region[spat_region == 30] = 11
 
-    # cell area from lat: lat_correction_factor * (lat_km at equator * lon_km at equator) * (resolution squared) = sqkm
+    # cell area from lat: lat_correction_factor * (lat_km at equator * lon_km at equator) * (resolution squred) = sqkm
     cellarea = np.cos(np.radians(spat_coords[:, 0])) * (111.32 * 110.57) * (c.resin**2)
 
     # create an array with the actual percentage of the grid cell included in the data; some are cut by AEZ or Basin
@@ -393,7 +361,7 @@ def read_base(log, c, spat_landclasses, sequence_metric_dict, metric_seq, region
     spat_ludata = spat_ludata / (c.resin ** 2) * np.transpose([cellarea, ] * len(spat_landclasses))
 
     return [spat_ludata, spat_water, spat_coords, spat_metric_region, spat_grid_id, spat_metric, spat_region, ngrids,
-            cellarea, celltrunk, sequence_metric_dict]
+            cellarea, celltrunk]
 
 
 def to_array(f, target_index, delim=','):

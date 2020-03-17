@@ -8,16 +8,16 @@ Open source under license BSD 2-Clause - see LICENSE and DISCLAIMER
 
 @author:  Chris R. Vernon (PNNL); Yannick le Page (niquya@gmail.com)
 """
-import numpy as np
-import pandas as pd
-import time
-import os
 
-import demeter.demeter_io.reader as rdr
-import demeter.demeter_io.writer as wdr
-import demeter.reconcile as rec
-from demeter.constraints import ApplyConstraints
-from demeter.weight.kernel_density import KernelDensity
+
+import numpy as np
+import time
+
+import demeter_io.reader as rdr
+import demeter_io.writer as wdr
+import reconcile as rec
+from constraints import ApplyConstraints
+from weight.kernel_density import KernelDensity
 
 
 class Stage:
@@ -83,9 +83,6 @@ class Stage:
         self.gcam_landmatrix = None
         self.ixr_ixm_ixg = None
         self.metric_id_array = None
-        self.sequence_metric_dict = None
-        self.metric_not_in_prj = None
-        self.metric_sequence_list, self.region_sequence_list = self.prep_reference()
 
         # populate
         self.stage()
@@ -146,30 +143,6 @@ class Stage:
 
         self.log.info('PERFORMANCE:  Allocation files processed in {0} seconds'.format(time.time() - t0))
 
-    def prep_reference(self):
-        """Read the corresponding reference file to the associated basin or AEZ metric.
-        Also read in region ids.
-
-        :param f:                       Full path with filename and extension to the input file
-        :param metric:                  basin or aez
-        :return:                        Sorted list of metric ids, Sorted list of region ids
-        """
-        # if basin
-        met = self.c.metric.lower()
-        if met == 'basin':
-            df = pd.read_csv(os.path.join(self.c.ref_dir, 'gcam_basin_lookup.csv'), usecols=['basin_id'])
-            m = sorted(df['basin_id'].tolist())
-
-        # if AEZ, use 1 through 18 - this will not change
-        elif met == 'aez':
-            m = list(range(1, 19, 1))
-
-        # read in region ids
-        rdf = pd.read_csv(os.path.join(self.c.ref_dir, 'gcam_regions_32.csv'), usecols=['gcam_region_id'])
-        r = sorted(rdf['gcam_region_id'].tolist())
-
-        return m, r
-
     def prep_projected(self):
         """
         Prepare projected land allocation data.
@@ -183,12 +156,11 @@ class Stage:
         # extract and process data contained from the land allocation GCAM output file
         gcam_data = rdr.read_gcam_file(self.log, self.c.lu_file, self.gcam_landclasses, start_yr=self.c.year_b,
                                        end_yr=self.c.year_e, scenario=self.c.scenario, region_dict=self.d_regnm_id,
-                                       agg_level=self.c.agg_level, area_factor=self.c.proj_factor,
-                                       metric_seq=self.metric_sequence_list)
+                                       agg_level=self.c.agg_level, area_factor=self.c.proj_factor)
 
         # unpack variables
         self.user_years, self.gcam_ludata, self.gcam_aez, self.gcam_landname, self.gcam_regionnumber, self.allreg, \
-        self.allregnumber, self.allregaez, self.allaez, self.metric_id_array, self.sequence_metric_dict = gcam_data
+        self.allregnumber, self.allregaez, self.allaez, self.metric_id_array = gcam_data
 
         self.log.info('PERFORMANCE:  Projected landuse data prepared in {0} seconds'.format(time.time() - t0))
 
@@ -203,12 +175,11 @@ class Stage:
         t0 = time.time()
 
         # extract and process base layer land cover data
-        base_data = rdr.read_base(self.log, self.c, self.spat_landclasses, self.sequence_metric_dict,
-                                  metric_seq=self.metric_sequence_list, region_seq=self.region_sequence_list)
+        base_data = rdr.read_base(self.log, self.c, self.spat_landclasses)
 
         # unpack variables
         self.spat_ludata, self.spat_water, self.spat_coords, self.spat_aez_region, self.spat_grid_id, self.spat_aez, \
-        self.spat_region, self.ngrids, self.cellarea, self.celltrunk, self.sequence_metric_dict = base_data
+        self.spat_region, self.ngrids, self.cellarea, self.celltrunk = base_data
 
         self.log.info('PERFORMANCE:  Base spatial landuse data prepared in {0} seconds'.format(time.time() - t0))
 
@@ -253,7 +224,7 @@ class Stage:
                                    self.gcam_landclasses, self.gcam_regionnumber, self.gcam_aez, self.gcam_landname,
                                    self.gcam_agg, self.gcam_ludata, self.ngrids, self.constrain_names,
                                    self.spat_landclasses, self.spat_agg, self.spat_ludata, self.c.map_luc_steps,
-                                   self.c.map_luc, self.c.constraint_files)
+                                   self.c.map_luc, self.c.map_tot_luc, self.c.constraint_files)
 
         # apply spatial constraints
         self.spat_ludataharm, self.spat_ludataharm_orig_steps, self.spat_ludataharm_orig = self.cst.apply_spat_constraints()

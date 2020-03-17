@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Kernel density algorithm.
 
@@ -12,7 +14,7 @@ import numpy as np
 
 from scipy import ndimage
 
-import demeter.demeter_io.writer as wdr
+import demeter_io.writer as wdr
 
 
 class KernelDensity:
@@ -146,6 +148,7 @@ class KernelDensity:
 
         :return:
         """
+	print("apply_convolution!")
         for pft_order in np.unique(self.order_rules):
 
             # get target PFT
@@ -162,7 +165,7 @@ class KernelDensity:
 
             # attributing min value to grid-cells with zeros, otherwise they have no chance of getting selected,
             #   while we might need them.
-            kernel_maps[:, :, pft][kernel_maps[:, :, pft] == 0] = np.nanmin(kernel_maps[:, :, pft][kernel_maps[:, :, pft] > 0])
+            kernel_maps[:, :, pft][kernel_maps[:, :, pft] == 0] = 0.1 #np.nanmin(kernel_maps[:, :, pft][kernel_maps[:, :, pft] > 0])
 
             # add to map array if user selects to plot them
             if self.map_kernels == 1:

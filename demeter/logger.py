@@ -7,6 +7,7 @@ Open source under license BSD 2-Clause - see LICENSE and DISCLAIMER
 
 @author:  Chris R. Vernon (PNNL)
 """
+
 import logging
 import sys
 
@@ -78,14 +79,3 @@ class Logger:
         self.set_file(self.f)
 
         return log
-
-    def close_logger(self, log):
-        """
-        Close filehandler.
-        :return:
-        """
-        handlers = log.handlers[:]
-        for h in handlers:
-            h.flush()
-            h.close()
-            log.removeHandler(h)

@@ -7,22 +7,20 @@ Open source under license BSD 2-Clause - see LICENSE and DISCLAIMER
 
 @author:  Chris R. Vernon (PNNL); Yannick le Page (niquya@gmail.com)
 """
+
+
 import os
 import numpy as np
+import sys
 
-import demeter.demeter_io.reader as rdr
-
-
-class ValidationException(Exception):
-    def __init__(self,*args,**kwargs):
-        Exception.__init__(self,*args,**kwargs)
+import demeter_io.reader as rdr
 
 
 class ApplyConstraints:
 
     def __init__(self, allreg, allaez, final_landclasses, user_years, ixr_ixm, allregaez, spat_region, allregnumber,
                  spat_aez, gcam_landclasses, gcam_regionnumber, gcam_aez, gcam_landname, gcam_agg, gcam_ludata, ngrids,
-                 constrain_names, spat_landclasses, spat_agg, spat_ludata, map_luc_steps, map_luc,
+                 constrain_names, spat_landclasses, spat_agg, spat_ludata, map_luc_steps, map_luc, map_tot_luc,
                  constraint_files):
 
         self.allreg = allreg
@@ -50,6 +48,7 @@ class ApplyConstraints:
         self.spat_ludata = spat_ludata
         self.map_luc_steps = map_luc_steps
         self.map_luc = map_luc
+        self.map_tot_luc = map_tot_luc
         self.constraint_files = constraint_files
 
         # assign array holding constraints
@@ -101,7 +100,7 @@ class ApplyConstraints:
                 print("\nERROR: Aggregation numbers for PFT {0} in spatial allocation file sum up to more than 1.".format(i))
                 print("Please correct and try again.")
                 print("Exiting...\n")
-                raise ValidationException
+                sys.exit()
 
             # if individual values sum to greater than 1
             if np.sum(t > 0) > 1:
@@ -197,7 +196,7 @@ class ApplyConstraints:
                 print("\nERROR: No aggregation class defined for PFT {0} in the GCAM allocation file".format(self.gcam_landclasses(gix)))
                 print("Please correct and try again.")
                 print("Exiting...\n")
-                raise ValidationException
+                sys.exit()
 
             # Examine the case of one-to-many recombination (e.g., rockicedesert to snow and sparse). Data is split into
             #   the new categories following their share in the base land use layer within the considered region,

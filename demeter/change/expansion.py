@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 Land use expansion algorithm.
 
@@ -241,10 +243,9 @@ def apply_expansion(log, c, allregnumber, allregmet, spat_ludataharm, spat_regio
         metnum_idx = metnumber - 1
 
         # create data subset
-        reg_met_mask = (spat_region == regnumber) & (spat_met == metnumber)
-        spat_ludataharm_sub = spat_ludataharm[reg_met_mask]
-        kernel_vector_sub = kernel_vector[reg_met_mask]
-        cons_data_sub = cons_data[reg_met_mask]
+        spat_ludataharm_sub = spat_ludataharm[(spat_region == regnumber) & (spat_met == metnumber)]
+        kernel_vector_sub = kernel_vector[(spat_region == regnumber) & (spat_met == metnumber)]
+        cons_data_sub = cons_data[(spat_region == regnumber) & (spat_met == metnumber)]
 
         # calculate expansion for each PFT
         exp = _expansion(c.diagnostic, diag_file, spat_ludataharm_sub, kernel_vector_sub, cons_data_sub, reg_idx,
@@ -252,8 +253,8 @@ def apply_expansion(log, c, allregnumber, allregmet, spat_ludataharm, spat_regio
                          c.stochastic_expansion, c.selection_threshold, land_mismatch, target_change)
 
         # apply expansion and update transitions
-        spat_ludataharm[reg_met_mask], target_change, trans_mat = exp
-        transitions[reg_met_mask, :, :] += trans_mat
+        spat_ludataharm[(spat_region == regnumber) & (spat_met == metnumber)], target_change, trans_mat = exp
+        transitions[(spat_region == regnumber) & (spat_met == metnumber), :, :] += trans_mat
 
     # calculate non-achieved change
     non_chg = np.sum(abs(target_change[:, :, :])) / 2.
